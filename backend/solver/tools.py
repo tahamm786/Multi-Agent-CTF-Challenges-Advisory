@@ -1,7 +1,55 @@
 import requests
 from urllib.parse import urljoin
 import re
+import docker
+import tarfile
+import io
 
+_docker_client = docker.from_env()
+
+def make_execute_tool(workspace_dir:str):
+    """
+    Returns an execute_python_code function bound to a specific host workspace
+    directory, which is mounted into every container spawned by this function --
+    so files written in one call are visible in the next call within the same run.
+    """
+     
+    def execute_python_code(code: str):
+        """
+        Execute arbitrary Python code inside an isolated, network-enabled sandbox
+        container and return its stdout/stderr. Use this for -- custom headers, cookies, hashing, encoding/
+        decoding, parsing complex responses, or any bespoke logic you need to write.
+        The 'requests' and 'bs4' libraries are pre-installed.
+        """
+        container = None
+        try:
+            container = _docker_client.containers.run(
+                "ctf-sandbox",
+                command=["python3", "-c", code],
+                detach=True,
+                network_mode="bridge",   # allow outbound network -- needed to hit CTF targets
+                mem_limit="256m",        # hard resource cap
+                nano_cpus=1_000_000_000, # cap at 1 CPU core
+                remove=False,            # we remove manually after reading logs
+                volumes={workspace_dir: {"bind":"/workspace","mode":"rw"}},
+                working_dir="/workspace"
+            )
+            result = container.wait(timeout=30)  # hard timeout on execution
+            logs = container.logs(stdout=True, stderr=True).decode(errors="replace")
+            return {
+                "exit_code": result.get("StatusCode"),
+                "output": logs[:4000],  # cap output size fed back to the LLM
+            }
+        except Exception as e:
+            return {"error": str(e)}
+        finally:
+            if container:
+                try:
+                    container.remove(force=True)
+                except Exception:
+                    pass
+
+    return execute_python_code
 
 def fetch_page(url:str , username: str = None, password: str = None) -> dict: 
 
@@ -113,3 +161,26 @@ TOOL_MAP = {
     "check_path": check_path,
     "extract_links": extract_links,
 }
+
+EXECUTE_CODE_SCHEMA = [
+    {
+        "type": "function",
+        "function": {
+            "name": "execute_python_code",
+            "description": (
+                "Execute Python code in an isolated sandbox with 'requests' and 'bs4' "
+                "pre-installed, plus internet access. Use it to fetch pages, inspect "
+                "headers/cookies, set custom headers, parse HTML, decode/hash data, "
+                "or any other logic needed."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "code": {"type": "string", "description": "The Python code to execute"}
+                },
+                "required": ["code"],
+            },
+        },
+    }
+]
+

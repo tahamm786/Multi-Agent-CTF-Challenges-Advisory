@@ -2,21 +2,20 @@ from google import genai
 from google.genai import types
 from django.conf import settings
 from .tools import fetch_page, check_path, extract_links, TOOL_SCHEMAS, TOOL_MAP
-
 from groq import Groq
 from django.conf import settings
 import json
  
 groq_client = Groq(api_key=settings.GROQ_API_KEY)
 
-def call_agent(prompt: str, tools: list = None, tool_map: dict = None, model: str = "qwen/qwen3.8-27b"):
+def call_agent(prompt: str, tools: list = None, tool_map: dict = None, model: str = "qwen/qwen3.8-27b",max_steps=25):
     """
     tools: list of OpenAI-format tool schemas (dicts)
     tool_map: dict mapping tool name (str) -> actual Python function to call
     """
     messages = [{"role": "user", "content": prompt}]
 
-    for step in range(6):  # hard step limit, same idea as before
+    for step in range(max_steps): 
         response = groq_client.chat.completions.create(
             model=model,
             messages=messages,
