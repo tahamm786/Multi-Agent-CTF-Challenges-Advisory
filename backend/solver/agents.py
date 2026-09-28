@@ -2,11 +2,11 @@ from .llmclient import call_agent
 from .tools import make_execute_tool
 import tempfile
 import shutil
-from .llmclient import call_agent_openrouter as call_agent
+#from .llmclient import call_agent_openrouter as call_agent
 
 def run_coordinator(target_input: str, context_notes: str = "", overall_goal: str = None, max_rounds: int = 6) -> str:
     if overall_goal is None:
-        overall_goal = f"Find the flag/credential for target: {target_input}"
+        overall_goal = f"F Continue solving/investigating further on: {target_input}"
 
     specialists = {
         "recon": ("Recon", run_recon_agent),
