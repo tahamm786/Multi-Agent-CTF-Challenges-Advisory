@@ -15,6 +15,7 @@ from decouple import config
 
 GEMINI_API_KEY = config('GEMINI_API_KEY') #Gemini API KEY safely stored here
 GROQ_API_KEY = config('GROQ_API_KEY')
+OPENROUTER_API_KEY = config('OPENROUTER_API_KEY')
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent

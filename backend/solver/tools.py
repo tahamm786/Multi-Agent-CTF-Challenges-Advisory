@@ -38,7 +38,7 @@ def make_execute_tool(workspace_dir:str):
             logs = container.logs(stdout=True, stderr=True).decode(errors="replace")
             return {
                 "exit_code": result.get("StatusCode"),
-                "output": logs[:4000],  # cap output size fed back to the LLM
+                "output": logs[:1500],  # cap output size fed back to the LLM
             }
         except Exception as e:
             return {"error": str(e)}
