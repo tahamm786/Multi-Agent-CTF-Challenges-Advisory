@@ -5,7 +5,13 @@ import docker
 import tarfile
 import io
 
-_docker_client = docker.from_env()
+def get_docker_client(): #to run docker only when needed and not always
+    try:
+        return docker.from_env()
+    except docker.errors.DockerException as e:
+        raise RuntimeError(
+            "Docker daemon is not running. Please start Docker Desktop before running tool containers."
+        ) from e
 
 def make_execute_tool(workspace_dir:str):
     """
@@ -13,7 +19,9 @@ def make_execute_tool(workspace_dir:str):
     directory, which is mounted into every container spawned by this function --
     so files written in one call are visible in the next call within the same run.
     """
-     
+    client = get_docker_client()
+    history = []  # accumulates every snippet run so far, this run
+
     def execute_python_code(code: str):
         """
         Execute arbitrary Python code inside an isolated, network-enabled sandbox
@@ -21,11 +29,12 @@ def make_execute_tool(workspace_dir:str):
         decoding, parsing complex responses, or any bespoke logic you need to write.
         The 'requests' and 'bs4' libraries are pre-installed.
         """
-        container = None
+
+        full_code = "\n".join(history + [code])
         try:
-            container = _docker_client.containers.run(
+            container = client.containers.run(
                 "ctf-sandbox",
-                command=["python3", "-c", code],
+                command=["python3", "-c", full_code],
                 detach=True,
                 network_mode="bridge",   # allow outbound network -- needed to hit CTF targets
                 mem_limit="256m",        # hard resource cap
@@ -36,10 +45,16 @@ def make_execute_tool(workspace_dir:str):
             )
             result = container.wait(timeout=30)  # hard timeout on execution
             logs = container.logs(stdout=True, stderr=True).decode(errors="replace")
+            exit_code = result.get("StatusCode")
+
+            if exit_code == 0:
+                history.append(code)  # only keep snippets that actually succeeded
+
             return {
-                "exit_code": result.get("StatusCode"),
-                "output": logs[:1500],  # cap output size fed back to the LLM
+                "exit_code": exit_code,
+                "output": logs if len(logs) <= 1500 else logs[:500] + "\n...[truncated]...\n" + logs[-1000:],
             }
+        
         except Exception as e:
             return {"error": str(e)}
         finally:
@@ -48,7 +63,7 @@ def make_execute_tool(workspace_dir:str):
                     container.remove(force=True)
                 except Exception:
                     pass
-
+    
     return execute_python_code
 
 def fetch_page(url:str , username: str = None, password: str = None) -> dict: 

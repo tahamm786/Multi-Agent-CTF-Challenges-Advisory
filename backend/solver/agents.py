@@ -1,10 +1,27 @@
-from .llmclient import call_agent
+from .llmclient import call_agent_qwen as call_agent
 from .tools import make_execute_tool
 import tempfile
+import re
 import shutil
 #from .llmclient import call_agent_openrouter as call_agent
+from .models import AgentEvent
 
-def run_coordinator(target_input: str, context_notes: str = "", overall_goal: str = None, max_rounds: int = 6) -> str:
+def classify_target(target_input: str) -> bool:
+    check_prompt = f"""Is this a plausible CTF/security-challenge target (a URL, 
+file, hash, ciphertext, or similar)? Answer ONLY 'yes' or 'no'.
+Input: {target_input}"""
+    verdict = call_agent(check_prompt, tools=None, tool_map=None).strip().lower()
+    return verdict.startswith("yes")
+
+def run_coordinator(target_input: str, context_notes: str = "", overall_goal: str = None, max_rounds: int = 6,session_id=None) -> str:
+
+    
+    if not classify_target(target_input):
+        msg = "This doesn't look like a CTF/security-challenge target, so no agents were run."
+        AgentEvent.objects.create(session_id=session_id, agent_name="Coordinator",
+                                   event_type="agent_finished", content=msg)
+        return msg
+
     if overall_goal is None:
         overall_goal = f"F Continue solving/investigating further on: {target_input}"
 
@@ -20,7 +37,7 @@ def run_coordinator(target_input: str, context_notes: str = "", overall_goal: st
 
     # Always start with Recon
     print(f"\n[COORDINATOR] Overall goal: {overall_goal}\n")
-    recon_result = run_recon_agent(target_input, f"OVERALL GOAL: {overall_goal}\n{context_notes}")
+    recon_result = run_recon_agent(target_input, f"OVERALL GOAL: {overall_goal}\n{context_notes}",session_id=session_id)
     findings_log.append(("Recon", recon_result))
 
     for round_num in range(max_rounds):
@@ -40,24 +57,28 @@ If a specific sub-problem needs solving (e.g. "this data needs decoding" or "thi
 form needs SQLi"), pick the specialist whose expertise matches THAT sub-problem,
 not the original target type.
 """
-        next_step = call_agent(routing_prompt, tools=None, tool_map=None).strip().lower()
+        next_step = call_agent(routing_prompt, tools=None, tool_map=None,session_id=session_id, agent_name="Coordinator").strip().lower()
         print(f"\n[COORDINATOR] Round {round_num+1} decision: {next_step}\n")
 
-        if "done" in next_step:
+        if re.search(r"\bdone\b", next_step):
             break
 
-        matched = next((k for k in specialists if k in next_step), None)
+        # earliest-mentioned specialist wins (not dict order, which always favoured "recon")
+        matched = min((k for k in specialists if k in next_step), key=next_step.index, default=None)
+
         if not matched:
             print(f"[COORDINATOR] Could not parse routing decision, stopping.")
             break
 
         name, agent_fn = specialists[matched]
+        AgentEvent.objects.create(session_id=session_id, agent_name="Coordinator",
+                                   event_type="handoff", content=f"Routing to {name}")
         agent_context = (
             f"OVERALL GOAL: {overall_goal}\n\n"
             f"TEAM FINDINGS SO FAR:\n{combined_findings}\n\n"
             f"{context_notes}"
         )
-        result = agent_fn(target_input, agent_context)
+        result = agent_fn(target_input, agent_context,session_id=session_id)
         findings_log.append((name, result))
 
     combined_findings = "\n\n".join(f"### {name} Findings\n{result}" for name, result in findings_log)
@@ -74,12 +95,12 @@ agents contributed what). If the goal was NOT fully achieved, clearly state
 what was found, what's still missing, and what you'd recommend trying next.
 Do not repeat the full findings verbatim -- synthesize.
 """
-    final_answer = call_agent(synthesis_prompt, tools=None, tool_map=None)
+    final_answer = call_agent(synthesis_prompt, tools=None, tool_map=None,session_id=session_id, agent_name="Coordinator")
 
     return f"# Final Report\n\n{final_answer}\n\n---\n## Full Team Findings (for reference)\n\n{combined_findings}"
     
 
-def run_recon_agent(target_input: str, context_notes: str = "") -> str:
+def run_recon_agent(target_input: str, context_notes: str = "",session_id=None) -> str:
 
     workspace_dir = tempfile.mkdtemp(prefix="ctf_run_")
     print(f"\n{'='*50}\n[AGENT ACTIVATED] Initial Triage / Recon\n{'='*50}\n")
@@ -149,15 +170,17 @@ def run_recon_agent(target_input: str, context_notes: str = "") -> str:
         detailed forensic analysis of a file), determine if handing off to a specialized agent is better instead of solving it yourself.If you feel the task to be done is petty then go ahead and do it but if its much beyond your domain
         and in the real world if the task would be handed off to a specialized agent then hand it over.
         Report your findings and your reasoning for the handoff, even without a flag.
+
+        If you decide to stop early, clearly say the word 'stuck' or 'blocked' in your final message.
     """
-        return call_agent(prompt, tools=schema , tool_map=tool_map)
+        return call_agent(prompt, tools=schema , tool_map=tool_map,session_id=session_id,agent_name="Recon")
 
     finally:
           shutil.rmtree(workspace_dir, ignore_errors=True)
 
 
 
-def run_web_exploit_agent(target_input: str, context_notes: str = "") -> str:
+def run_web_exploit_agent(target_input: str, context_notes: str = "",session_id=None) -> str:
     workspace_dir = tempfile.mkdtemp(prefix="ctf_run_")
     try:
         execute_python_code = make_execute_tool(workspace_dir)
@@ -193,6 +216,9 @@ repeating the same idea with minor variations.
 
 CRITICAL RULE: Never assert a credential/flag from memory without verifying
 via a real request first.
+If you cannot verify a candidate flag with a real request, report it as an unverified guess, not a flag.
+
+If you decide to stop early, clearly say the word 'stuck' or 'blocked' in your final message.
 
 OUTPUT FORMAT (exact Markdown structure):
 ## 1. Target Overview
@@ -200,12 +226,12 @@ OUTPUT FORMAT (exact Markdown structure):
 ## 3. Vulnerability Identified
 ## 4. Artifacts for Hand-off (or Found Flags)
 """
-        return call_agent(prompt, tools=schema, tool_map=tool_map)
+        return call_agent(prompt, tools=schema, tool_map=tool_map,session_id=session_id,agent_name="Web Exploit")
     finally:
         shutil.rmtree(workspace_dir, ignore_errors=True)
 
 
-def run_crypto_agent(target_input: str, context_notes: str = "") -> str:
+def run_crypto_agent(target_input: str, context_notes: str = "",session_id=None) -> str:
     workspace_dir = tempfile.mkdtemp(prefix="ctf_run_")
     try:
         execute_python_code = make_execute_tool(workspace_dir)
@@ -242,6 +268,9 @@ infeasible brute force.
 
 CRITICAL RULE: Verify any decode/decrypt attempt actually produces
 readable/sensible output before treating it as the answer.
+If you cannot verify a candidate flag with a real request, report it as an unverified guess, not a flag.
+
+If you decide to stop early, clearly say the word 'stuck' or 'blocked' in your final message.
 
 OUTPUT FORMAT (exact Markdown structure):
 ## 1. Target Overview
@@ -249,13 +278,13 @@ OUTPUT FORMAT (exact Markdown structure):
 ## 3. Technique Identified
 ## 4. Artifacts for Hand-off (or Found Flags)
 """
-        return call_agent(prompt, tools=schema, tool_map=tool_map)
+        return call_agent(prompt, tools=schema, tool_map=tool_map,session_id=session_id,agent_name="Crypto")
     finally:
         shutil.rmtree(workspace_dir, ignore_errors=True)
 
 
 
-def run_forensics_agent(target_input: str, context_notes: str = "") -> str:
+def run_forensics_agent(target_input: str, context_notes: str = "",session_id=None) -> str:
     workspace_dir = tempfile.mkdtemp(prefix="ctf_run_")
     try:
         execute_python_code = make_execute_tool(workspace_dir)
@@ -291,18 +320,22 @@ BUDGET: Max 15 tool calls. If steganography extraction doesn't yield readable
 output after a few genuine technique attempts, state what you tried and stop
 rather than looping the same approach.
 
+If you cannot verify a candidate flag with a real request, report it as an unverified guess, not a flag.
+
+If you decide to stop early, clearly say the word 'stuck' or 'blocked' in your final message.
+
 OUTPUT FORMAT (exact Markdown structure):
 ## 1. Target Overview
 ## 2. Investigation Steps & Findings
 ## 3. Technique Identified
 ## 4. Artifacts for Hand-off (or Found Flags)
 """
-        return call_agent(prompt, tools=schema, tool_map=tool_map)
+        return call_agent(prompt, tools=schema, tool_map=tool_map,session_id=session_id,agent_name="Forensics")
     finally:
         shutil.rmtree(workspace_dir, ignore_errors=True)
 
 
-def run_binary_agent(target_input: str, context_notes: str = "") -> str:
+def run_binary_agent(target_input: str, context_notes: str = "",session_id=None) -> str:
     workspace_dir = tempfile.mkdtemp(prefix="ctf_run_")
     try:
         execute_python_code = make_execute_tool(workspace_dir)
@@ -338,13 +371,17 @@ YOUR EXPERTISE (this is a genuinely hard category -- be honest about limits):
 BUDGET: Max 12 tool calls. This category has the lowest expected success rate --
 report honestly rather than fabricating a plausible-looking but unverified answer.
 
+If you cannot verify a candidate flag with a real request, report it as an unverified guess, not a flag.
+
+If you decide to stop early, clearly say the word 'stuck' or 'blocked' in your final message.
+
 OUTPUT FORMAT (exact Markdown structure):
 ## 1. Target Overview
 ## 2. Investigation Steps & Findings
 ## 3. Assessment (Solved / Partially Solved / Beyond Current Tooling)
 ## 4. Artifacts for Hand-off (or Found Flags)
 """
-        return call_agent(prompt, tools=schema, tool_map=tool_map)
+        return call_agent(prompt, tools=schema, tool_map=tool_map,session_id=session_id,agent_name="Binary")
     finally:
         shutil.rmtree(workspace_dir, ignore_errors=True)
         
