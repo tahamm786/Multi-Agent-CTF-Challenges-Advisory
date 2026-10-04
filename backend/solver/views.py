@@ -48,7 +48,10 @@ def _run_session_in_background(session_id,target_input,overall_goal,context_note
     try:
         final_report=run_coordinator(target_input,context_notes,overall_goal,session_id=session_id)
         session.final_report=final_report
-        session.status="solved"
+        if session.final_report and session.final_report.startswith("This doesn't look like"):
+            session.status = "rejected" 
+        else:
+            session.status="solved"
 
     except Exception as e:
         session.final_report=f"Run Failed : {e}"

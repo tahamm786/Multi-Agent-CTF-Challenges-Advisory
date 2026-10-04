@@ -7,7 +7,8 @@ class SolveSession(models.Model):
         ('pending','Pending'),
         ('running','Running'),
         ('solved','Solved'),
-        ('failed','Failed')
+        ('failed','Failed'),
+        ('rejected', 'Rejected'),
     ]
 
     target_input=models.TextField()

@@ -3,15 +3,32 @@ from .tools import make_execute_tool
 import tempfile
 import re
 import shutil
-#from .llmclient import call_agent_openrouter as call_agent
+from .llmclient import call_agent_openrouter as call_agent
 from .models import AgentEvent
 
-def classify_target(target_input: str) -> bool:
-    check_prompt = f"""Is this a plausible CTF/security-challenge target (a URL, 
-file, hash, ciphertext, or similar)? Answer ONLY 'yes' or 'no'.
+def classify_target(target_input: str, session_id=None) -> bool:
+    check_prompt = f"""Determine if this input is a plausible CTF/security-challenge target:
+a URL, file reference, hash, ciphertext, encoded data (hex/base64/etc.), or any
+data that could plausibly be investigated for a hidden flag or vulnerability.
+
+Only answer 'no' if the input is CLEARLY unrelated to security/CTF work --
+e.g. casual conversation, creative writing requests (poems/stories), general
+knowledge questions, or small talk. If you are genuinely unsure, or if the
+input could plausibly be some form of encoded/obscured data even without
+obvious structure, answer 'yes' -- err on the side of investigating it.
+
+Answer ONLY 'yes' or 'no'.
+
 Input: {target_input}"""
-    verdict = call_agent(check_prompt, tools=None, tool_map=None).strip().lower()
-    return verdict.startswith("yes")
+    verdict = call_agent(check_prompt, tools=None, tool_map=None,
+                          session_id=session_id, agent_name="Coordinator").strip().lower()
+    is_valid = verdict.startswith("yes")
+    AgentEvent.objects.create(
+        session_id=session_id, agent_name="Coordinator",
+        event_type="agent_finished",
+        content=f"Target classification: {'valid' if is_valid else 'rejected'} ({verdict})",
+    )
+    return is_valid
 
 def run_coordinator(target_input: str, context_notes: str = "", overall_goal: str = None, max_rounds: int = 6,session_id=None) -> str:
 

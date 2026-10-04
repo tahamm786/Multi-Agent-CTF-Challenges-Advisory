@@ -3,6 +3,7 @@ from groq import Groq
 from openai import OpenAI
 import json
 from .models import AgentEvent
+import time
 
 groq_client = Groq(api_key=settings.GROQ_API_KEY)
 openrouter_client = OpenAI(
@@ -72,8 +73,23 @@ def _run_agent_loop(client, prompt, tools=None, tool_map=None, model="", max_ste
 
         if not getattr(response, "choices", None):
             error_info = getattr(response, "error", None) or "No choices returned (provider error or rate limit)"
-            _log(session_id, agent_name, "agent_finished", f"Provider error: {error_info}")
-            return f"Agent failed: provider returned no response ({error_info})"
+            err_str = str(error_info).lower()
+
+            if "overloaded" in err_str or "rate limit" in err_str or "503" in err_str:
+                _log(session_id, agent_name, "tool_result", f"Provider overloaded, retrying once: {error_info}")
+                time.sleep(3)
+                try:
+                    response = client.chat.completions.create(
+                        model=model, messages=trimmed,
+                        tools=tools if tools else None, max_tokens=max_output_tokens,
+                    )
+                except Exception:
+                    pass  # fall through to the check below with whatever we got (or didn't)
+
+            if not getattr(response, "choices", None):
+                error_info = getattr(response, "error", None) or "No choices returned (provider error or rate limit)"
+                _log(session_id, agent_name, "agent_finished", f"Provider error: {error_info}")
+                return f"Agent failed: provider returned no response ({error_info})"
 
         msg = response.choices[0].message
 
@@ -110,6 +126,19 @@ def _run_agent_loop(client, prompt, tools=None, tool_map=None, model="", max_ste
 
             _log(session_id, agent_name, "tool_call", f"{func_name}({_short(func_args)})")
 
+            if func_args is not None:
+                print(f"  [Step {step}] -> calling {func_name}({_short(func_args)})")
+                if func_name not in (tool_map or {}):
+                    result = {"error": f"Unknown tool '{func_name}'. Available: {list((tool_map or {}).keys())}"}
+                else:
+                    try:
+                        result = tool_map[func_name](**func_args)
+                    except Exception as e:
+                        result = {"error": f"Tool '{func_name}' raised: {e}"}
+
+            _log(session_id, agent_name, "tool_result", _short(result))
+            print(f"  [Step {step}] <- result: {_short(result)}")
+
             if isinstance(result, dict) and "error" in result:
                 consecutive_errors += 1
             else:
@@ -132,27 +161,6 @@ def _run_agent_loop(client, prompt, tools=None, tool_map=None, model="", max_ste
                     )
                 })
                 consecutive_errors = 0
-
-            if func_args is not None:
-                print(f"  [Step {step}] -> calling {func_name}({_short(func_args)})")
-                if func_name not in (tool_map or {}):
-                    result = {"error": f"Unknown tool '{func_name}'. Available: {list((tool_map or {}).keys())}"}
-                else:
-                    try:
-                        result = tool_map[func_name](**func_args)
-                    except Exception as e:
-                        result = {"error": f"Tool '{func_name}' raised: {e}"}
-
-            _log(session_id, agent_name, "tool_result", _short(result))
-            print(f"  [Step {step}] <- result: {_short(result)}")
-
-
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tool_call.id,
-                "content": json.dumps(result),
-            })
-
     
     print(f"  [!] Max steps ({max_steps}) reached without a final answer.")
     _log(session_id, agent_name, "agent_finished", "Max steps reached without a final answer.")
