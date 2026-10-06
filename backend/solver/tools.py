@@ -31,6 +31,7 @@ def make_execute_tool(workspace_dir:str):
         """
 
         full_code = "\n".join(history + [code])
+        container=None
         try:
             container = client.containers.run(
                 "ctf-sandbox",

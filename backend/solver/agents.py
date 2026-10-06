@@ -33,7 +33,7 @@ Input: {target_input}"""
 def run_coordinator(target_input: str, context_notes: str = "", overall_goal: str = None, max_rounds: int = 6,session_id=None) -> str:
 
     
-    if not classify_target(target_input):
+    if not classify_target(target_input,session_id=session_id):
         msg = "This doesn't look like a CTF/security-challenge target, so no agents were run."
         AgentEvent.objects.create(session_id=session_id, agent_name="Coordinator",
                                    event_type="agent_finished", content=msg)
@@ -187,8 +187,7 @@ def run_recon_agent(target_input: str, context_notes: str = "",session_id=None) 
         detailed forensic analysis of a file), determine if handing off to a specialized agent is better instead of solving it yourself.If you feel the task to be done is petty then go ahead and do it but if its much beyond your domain
         and in the real world if the task would be handed off to a specialized agent then hand it over.
         Report your findings and your reasoning for the handoff, even without a flag.
-
-        If you decide to stop early, clearly say the word 'stuck' or 'blocked' in your final message.
+    8) As soon as you get the cateIf you decide to stop early, clearly say the word 'stuck' or 'blocked' in your final message.
     """
         return call_agent(prompt, tools=schema , tool_map=tool_map,session_id=session_id,agent_name="Recon")
 

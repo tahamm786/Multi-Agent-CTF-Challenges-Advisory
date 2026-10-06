@@ -1,5 +1,5 @@
 from django.db import models
- 
+from django.conf import settings
 
 class SolveSession(models.Model):
 
@@ -11,6 +11,13 @@ class SolveSession(models.Model):
         ('rejected', 'Rejected'),
     ]
 
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='sessions',
+        null=True,
+        blank=True,
+    )
     target_input=models.TextField()
     context_notes=models.TextField(blank=True)
     overall_goal=models.TextField(blank=True)

@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 from decouple import config
+import os 
 
 GEMINI_API_KEY = config('GEMINI_API_KEY') #Gemini API KEY safely stored here
 GROQ_API_KEY = config('GROQ_API_KEY')
@@ -28,7 +29,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-v)2n%akq$agf8bewqu%n)tp(&ma$!zxx8ond19$)(zrul4-a#y'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = []
 
@@ -45,6 +46,7 @@ INSTALLED_APPS = [
     'rest_framework',  #DRF
     'corsheaders',      # for the cors issue
     'solver', # our main solver app
+    'rest_framework.authtoken' #for auth login
 ]
 
 MIDDLEWARE = [
@@ -131,3 +133,16 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CORS_ALLOW_ALL_ORIGINS = True  # fine for local dev - kinda says allow requests from any origin for now - ALLOWS DJANGO TO RECEIVE REQUESTS FROM REACT
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.TokenAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+
+    'DEFAULT_THROTTLE_RATES': {
+        'session_create': '5/hour',
+    }
+}
