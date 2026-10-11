@@ -3,8 +3,9 @@ from .tools import make_execute_tool
 import tempfile
 import re
 import shutil
-from .llmclient import call_agent_openrouter as call_agent
+#from .llmclient import call_agent_openrouter as call_agent
 from .models import AgentEvent
+from .allowlist import get_allowed_domains  
 
 def classify_target(target_input: str, session_id=None) -> bool:
     check_prompt = f"""Determine if this input is a plausible CTF/security-challenge target:
@@ -122,7 +123,7 @@ def run_recon_agent(target_input: str, context_notes: str = "",session_id=None) 
     workspace_dir = tempfile.mkdtemp(prefix="ctf_run_")
     print(f"\n{'='*50}\n[AGENT ACTIVATED] Initial Triage / Recon\n{'='*50}\n")
     try:
-        execute_python_code = make_execute_tool(workspace_dir)
+        execute_python_code = make_execute_tool(workspace_dir, allowed_domains=get_allowed_domains())
 
         schema, tool_map = _build_tool_schema(execute_python_code)
 
@@ -199,7 +200,7 @@ def run_recon_agent(target_input: str, context_notes: str = "",session_id=None) 
 def run_web_exploit_agent(target_input: str, context_notes: str = "",session_id=None) -> str:
     workspace_dir = tempfile.mkdtemp(prefix="ctf_run_")
     try:
-        execute_python_code = make_execute_tool(workspace_dir)
+        execute_python_code = make_execute_tool(workspace_dir, allowed_domains=get_allowed_domains())
         print(f"\n{'='*50}\n[AGENT ACTIVATED] Web Exploitation Specialist\n{'='*50}\n")
         schema, tool_map = _build_tool_schema(execute_python_code)
 
@@ -250,7 +251,7 @@ OUTPUT FORMAT (exact Markdown structure):
 def run_crypto_agent(target_input: str, context_notes: str = "",session_id=None) -> str:
     workspace_dir = tempfile.mkdtemp(prefix="ctf_run_")
     try:
-        execute_python_code = make_execute_tool(workspace_dir)
+        execute_python_code = make_execute_tool(workspace_dir, allowed_domains=get_allowed_domains())
         print(f"\n{'='*50}\n[AGENT ACTIVATED] Cryptography Specialist\n{'='*50}\n")
         schema, tool_map = _build_tool_schema(execute_python_code)
 
@@ -303,7 +304,7 @@ OUTPUT FORMAT (exact Markdown structure):
 def run_forensics_agent(target_input: str, context_notes: str = "",session_id=None) -> str:
     workspace_dir = tempfile.mkdtemp(prefix="ctf_run_")
     try:
-        execute_python_code = make_execute_tool(workspace_dir)
+        execute_python_code = make_execute_tool(workspace_dir, allowed_domains=get_allowed_domains())
         schema, tool_map = _build_tool_schema(execute_python_code)
         print(f"\n{'='*50}\n[AGENT ACTIVATED] Forensics Specialist\n{'='*50}\n")
 
@@ -354,7 +355,7 @@ OUTPUT FORMAT (exact Markdown structure):
 def run_binary_agent(target_input: str, context_notes: str = "",session_id=None) -> str:
     workspace_dir = tempfile.mkdtemp(prefix="ctf_run_")
     try:
-        execute_python_code = make_execute_tool(workspace_dir)
+        execute_python_code = make_execute_tool(workspace_dir, allowed_domains=get_allowed_domains())
         schema, tool_map = _build_tool_schema(execute_python_code)
         print(f"\n{'='*50}\n[AGENT ACTIVATED] Binary/Reverse Engineering Specialist\n{'='*50}\n")
 

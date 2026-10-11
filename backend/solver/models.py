@@ -1,6 +1,15 @@
 from django.db import models
 from django.conf import settings
 
+class AllowedTargetDomain(models.Model):
+    domain = models.CharField(max_length=255, unique=True, help_text="e.g. 'overthewire.org' — matches it and any subdomain")
+    note = models.CharField(max_length=255, blank=True)
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.domain
+    
+
 class SolveSession(models.Model):
 
     STATUS_CHOICES=[

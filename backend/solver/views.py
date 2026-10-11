@@ -17,6 +17,7 @@ from .agents import run_coordinator
 from datetime import datetime
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.throttling import UserRateThrottle
+from .allowlist import is_allowed_target
 
 class SessionCreateThrottle(UserRateThrottle):
     scope = 'session_create'
@@ -37,6 +38,12 @@ class SolveSessionListCreateView(generics.ListCreateAPIView):
         if not target_input:
             return Response({"error": "target_input is required"}, status=status.HTTP_400_BAD_REQUEST)
 
+        if target_input.lower().startswith(("http://", "https://")) and not is_allowed_target(target_input):
+            return Response(
+                {"error": "Target is not on the approved list of training platforms."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
         context_notes = request.data.get("context_notes", '')
         overall_goal = request.data.get("overall_goal", '')
         session = SolveSession.objects.create(

@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+@theme {
+  /* --- Palette: "observatory console", not hacker-neon, not cream+terracotta --- */
+  --color-ink: #15202B;       /* deep slate-navy background */
+  --color-ink-raised: #1C2A38; /* panels/sidebar, one step up from ink */
+  --color-paper: #F6F3EC;     /* warm off-white, used sparingly for high-emphasis cards */
+  --color-wire: #3C5160;      /* steel-blue borders/dividers */
+  --color-wire-soft: #26384A; /* quieter divider on dark panels */
+  --color-ash: #9FAFBB;       /* secondary text on dark */
+  --color-signal: #E8A33D;    /* amber accent — active/attention */
+  --color-ok: #6B9E6A;        /* desaturated success green */
+  --color-fail: #C06A4E;      /* desaturated failure clay-red */
+  --color-pending: #7A8A96;   /* neutral grey-blue for pending */
+
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    background-color: var(--color-ink);
+    color: var(--color-paper);
+    font-family: var(--font-display);
+  }
+  ::selection {
+    background-color: var(--color-signal);
+    color: var(--color-ink);
+  }
+  /* visible keyboard focus everywhere, no exceptions */
+  :focus-visible {
+    outline: 2px solid var(--color-signal);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* The one deliberate motion moment: a new event line "typing in" from the left. */
+@keyframes line-in {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.event-line {
+  animation: line-in 180ms ease-out;
+}
+
+/* Subtle animated dot-grid accent, used only behind the empty state --
+   a restrained nod to the "gradient dots" idea, kept to our own palette
+   (amber/steel, not rainbow) and pure CSS so it costs nothing extra. */
+.dot-field {
+  background-image: radial-gradient(
+    circle at center,
+    var(--color-wire) 1px,
+    transparent 1px
+  );
+  background-size: 22px 22px;
+  background-position: 0 0;
+  animation: dot-drift 40s linear infinite;
+  opacity: 0.35;
+}
+@keyframes dot-drift {
+  from { background-position: 0 0; }
+  to   { background-position: 220px 220px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dot-field { animation: none; }
+}

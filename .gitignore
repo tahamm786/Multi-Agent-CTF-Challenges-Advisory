@@ -216,3 +216,16 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+#React
+node_modules/
+.env
+*.pyc
+__pycache__/
+db.sqlite3
+venv/
+env/
+build/
+dist/.
+agent/

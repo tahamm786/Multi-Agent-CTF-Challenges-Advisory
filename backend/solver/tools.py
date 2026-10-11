@@ -13,7 +13,43 @@ def get_docker_client(): #to run docker only when needed and not always
             "Docker daemon is not running. Please start Docker Desktop before running tool containers."
         ) from e
 
-def make_execute_tool(workspace_dir:str):
+
+def _build_network_guard(allowed_domains):
+    """
+    Returns a Python code snippet that monkey-patches `requests` inside the
+    sandbox so every outbound call is checked against the allowlist BEFORE
+    it's made. Prepended to every execute_python_code run.
+    """
+    domains_literal = _json.dumps(list(allowed_domains))
+    return f"""
+import requests as _rq
+from urllib.parse import urlparse as _urlparse
+
+_ALLOWED_DOMAINS = {domains_literal}
+
+def _host_allowed(url):
+    try:
+        host = (_urlparse(url).netloc or url).split(":")[0].lower()
+    except Exception:
+        return False
+    return any(host == d or host.endswith("." + d) for d in _ALLOWED_DOMAINS)
+
+_orig_request = _rq.Session.request
+
+def _guarded_request(self, method, url, *args, **kwargs):
+    if not _host_allowed(url):
+        raise PermissionError(
+            f"Blocked: '{{url}}' is not on the approved target allowlist."
+        )
+    return _orig_request(self, method, url, *args, **kwargs)
+
+_rq.Session.request = _guarded_request
+_rq.api.request = lambda method, url, **kw: _rq.session().request(method, url, **kw)
+requests = _rq
+"""
+
+
+def make_execute_tool(workspace_dir:str, allowed_domains=None):
     """
     Returns an execute_python_code function bound to a specific host workspace
     directory, which is mounted into every container spawned by this function --
@@ -21,6 +57,7 @@ def make_execute_tool(workspace_dir:str):
     """
     client = get_docker_client()
     history = []  # accumulates every snippet run so far, this run
+    guard_code = _build_network_guard(allowed_domains or [])
 
     def execute_python_code(code: str):
         """
@@ -30,7 +67,7 @@ def make_execute_tool(workspace_dir:str):
         The 'requests' and 'bs4' libraries are pre-installed.
         """
 
-        full_code = "\n".join(history + [code])
+        full_code = "\n".join([guard_code] + history + [code])
         container=None
         try:
             container = client.containers.run(
