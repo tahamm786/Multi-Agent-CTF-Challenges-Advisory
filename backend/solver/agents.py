@@ -92,10 +92,13 @@ not the original target type.
         AgentEvent.objects.create(session_id=session_id, agent_name="Coordinator",
                                    event_type="handoff", content=f"Routing to {name}")
         agent_context = (
-            f"OVERALL GOAL: {overall_goal}\n\n"
-            f"TEAM FINDINGS SO FAR:\n{combined_findings}\n\n"
-            f"{context_notes}"
-        )
+    f"OVERALL GOAL: {overall_goal}\n\n"
+    f"TEAM FINDINGS SO FAR:\n{combined_findings}\n\n"
+    f"IMPORTANT: Do NOT re-verify or redo steps already completed above. "
+    f"Pick up exactly where the previous agent left off and solve the "
+    f"specific blocker described in their findings.\n\n"
+    f"{context_notes}"
+)
         result = agent_fn(target_input, agent_context,session_id=session_id)
         findings_log.append((name, result))
 
@@ -188,7 +191,15 @@ def run_recon_agent(target_input: str, context_notes: str = "",session_id=None) 
         detailed forensic analysis of a file), determine if handing off to a specialized agent is better instead of solving it yourself.If you feel the task to be done is petty then go ahead and do it but if its much beyond your domain
         and in the real world if the task would be handed off to a specialized agent then hand it over.
         Report your findings and your reasoning for the handoff, even without a flag.
-    8) As soon as you get the cateIf you decide to stop early, clearly say the word 'stuck' or 'blocked' in your final message.
+    8) If you decide to stop early, clearly say the word 'stuck' or 'blocked' in your final message.
+
+    STOPPING RULE: Your OVERALL GOAL above defines what "done" means. The moment
+you have satisfied it (e.g. if the goal asks for a specific level's password
+and you've obtained it), STOP immediately and report success — do not
+continue chaining further levels "just in case" or to be thorough beyond
+what was asked. Continuing past the stated goal wastes budget and goes
+beyond what was requested.
+
     """
         return call_agent(prompt, tools=schema , tool_map=tool_map,session_id=session_id,agent_name="Recon")
 
@@ -242,6 +253,14 @@ OUTPUT FORMAT (exact Markdown structure):
 ## 2. Investigation Steps & Findings
 ## 3. Vulnerability Identified
 ## 4. Artifacts for Hand-off (or Found Flags)
+
+STOPPING RULE: Your OVERALL GOAL above defines what "done" means. The moment
+you have satisfied it (e.g. if the goal asks for a specific level's password
+and you've obtained it), STOP immediately and report success — do not
+continue chaining further levels "just in case" or to be thorough beyond
+what was asked. Continuing past the stated goal wastes budget and goes
+beyond what was requested.
+
 """
         return call_agent(prompt, tools=schema, tool_map=tool_map,session_id=session_id,agent_name="Web Exploit")
     finally:
@@ -294,6 +313,13 @@ OUTPUT FORMAT (exact Markdown structure):
 ## 2. Investigation Steps & Findings
 ## 3. Technique Identified
 ## 4. Artifacts for Hand-off (or Found Flags)
+
+STOPPING RULE: Your OVERALL GOAL above defines what "done" means. The moment
+you have satisfied it (e.g. if the goal asks for a specific level's password
+and you've obtained it), STOP immediately and report success — do not
+continue chaining further levels "just in case" or to be thorough beyond
+what was asked. Continuing past the stated goal wastes budget and goes
+beyond what was requested.
 """
         return call_agent(prompt, tools=schema, tool_map=tool_map,session_id=session_id,agent_name="Crypto")
     finally:
@@ -346,6 +372,14 @@ OUTPUT FORMAT (exact Markdown structure):
 ## 2. Investigation Steps & Findings
 ## 3. Technique Identified
 ## 4. Artifacts for Hand-off (or Found Flags)
+
+STOPPING RULE: Your OVERALL GOAL above defines what "done" means. The moment
+you have satisfied it (e.g. if the goal asks for a specific level's password
+and you've obtained it), STOP immediately and report success — do not
+continue chaining further levels "just in case" or to be thorough beyond
+what was asked. Continuing past the stated goal wastes budget and goes
+beyond what was requested.
+
 """
         return call_agent(prompt, tools=schema, tool_map=tool_map,session_id=session_id,agent_name="Forensics")
     finally:
@@ -397,6 +431,14 @@ OUTPUT FORMAT (exact Markdown structure):
 ## 2. Investigation Steps & Findings
 ## 3. Assessment (Solved / Partially Solved / Beyond Current Tooling)
 ## 4. Artifacts for Hand-off (or Found Flags)
+
+STOPPING RULE: Your OVERALL GOAL above defines what "done" means. The moment
+you have satisfied it (e.g. if the goal asks for a specific level's password
+and you've obtained it), STOP immediately and report success — do not
+continue chaining further levels "just in case" or to be thorough beyond
+what was asked. Continuing past the stated goal wastes budget and goes
+beyond what was requested.
+
 """
         return call_agent(prompt, tools=schema, tool_map=tool_map,session_id=session_id,agent_name="Binary")
     finally:
